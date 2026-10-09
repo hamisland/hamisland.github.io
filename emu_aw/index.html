@@ -1,1 +1,557 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EC2作成体験</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #eef2ff;
+        --ink: #0b1120;
+        --muted: #475569;
+        --card: #ffffff;
+        --line: #cbd5e1;
+        --primary: #0f766e;
+        --primary-hover: #115e59;
+        --danger: #b91c1c;
+        --shell-bg: #0a0f1a;
+        --shell-ink: #d7e2ff;
+        --shell-muted: #9fb3d9;
+        --shell-accent: #7dd3fc;
+      }
 
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+        background: radial-gradient(circle at 10% 10%, #dbeafe, #eef2ff 40%, #e2e8f0);
+        color: var(--ink);
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        display: grid;
+        gap: 1rem;
+      }
+
+      h1,
+      h2 {
+        margin: 0 0 0.75rem;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 1rem;
+        box-shadow: 0 10px 25px rgb(15 23 42 / 0.06);
+      }
+
+      .form-grid {
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        align-items: end;
+      }
+
+      label {
+        display: grid;
+        gap: 0.35rem;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      input,
+      select,
+      button {
+        font: inherit;
+      }
+
+      input,
+      select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.55rem 0.65rem;
+      }
+
+      button {
+        border: 0;
+        border-radius: 8px;
+        padding: 0.55rem 0.8rem;
+        cursor: pointer;
+        color: #fff;
+      }
+
+      button.primary {
+        background: var(--primary);
+      }
+
+      button.primary:hover {
+        background: var(--primary-hover);
+      }
+
+      button.secondary {
+        background: #1d4ed8;
+      }
+
+      button.secondary:hover {
+        background: #1e40af;
+      }
+
+      button.danger {
+        background: var(--danger);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid var(--line);
+        padding: 0.65rem;
+        font-size: 0.9rem;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--muted);
+        background: #f8fafc;
+      }
+
+      .empty-row td {
+        text-align: center;
+        color: var(--muted);
+      }
+
+      .shell-modal {
+        position: fixed;
+        inset: 0;
+        background: rgb(2 6 23 / 0.6);
+        display: grid;
+        place-items: center;
+        padding: 1rem;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .shell-window {
+        width: min(900px, 100%);
+        height: min(560px, 88vh);
+        background: var(--shell-bg);
+        color: var(--shell-ink);
+        border-radius: 12px;
+        border: 1px solid #334155;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        overflow: hidden;
+      }
+
+      .shell-header {
+        background: #111827;
+        border-bottom: 1px solid #334155;
+        color: var(--shell-accent);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.65rem 0.8rem;
+      }
+
+      .shell-output {
+        padding: 0.85rem;
+        font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+        font-size: 0.9rem;
+        overflow: auto;
+        line-height: 1.5;
+      }
+
+      .shell-line {
+        white-space: pre-wrap;
+      }
+
+      .shell-dim {
+        color: var(--shell-muted);
+      }
+
+      .shell-input-row {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.5rem;
+        border-top: 1px solid #334155;
+        padding: 0.7rem 0.8rem;
+        font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+        background: #0f172a;
+      }
+
+      .prompt {
+        color: #86efac;
+      }
+
+      #shell-input {
+        border: 0;
+        outline: none;
+        color: var(--shell-ink);
+        background: transparent;
+        padding: 0;
+      }
+
+      .status-running {
+        color: #16a34a;
+        font-weight: 700;
+      }
+
+      .status-stopped {
+        color: #b91c1c;
+        font-weight: 700;
+      }
+
+      @media (max-width: 900px) {
+        .card {
+          overflow-x: auto;
+        }
+
+        table {
+          min-width: 980px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>EC2インスタンス作成体験</h1>
+
+      <section class="card">
+        <h2>インスタンス作成</h2>
+        <form id="instance-form" class="form-grid">
+          <label>
+            インスタンス名
+            <input type="text" name="name" required placeholder="example-web-01" />
+          </label>
+
+          <label>
+            OS種類
+            <select name="os" required>
+              <option value="Amazon Linux 2023">Amazon Linux 2023</option>
+              <option value="Ubuntu 24.04 LTS">Ubuntu 24.04 LTS</option>
+              <option value="RHEL 9">RHEL 9</option>
+              <option value="Debian 12">Debian 12</option>
+            </select>
+          </label>
+
+          <label>
+            インスタンスタイプ
+            <select name="type" required>
+              <option value="t3.micro">t3.micro</option>
+              <option value="t3.small">t3.small</option>
+              <option value="t3.medium">t3.medium</option>
+              <option value="m7i.large">m7i.large</option>
+            </select>
+          </label>
+
+          <label>
+            VPC
+            <select name="vpc" required>
+              <option value="vpc-001a (10.0.0.0/16)">vpc-001a (10.0.0.0/16)</option>
+              <option value="vpc-0ab2 (172.16.0.0/16)">vpc-0ab2 (172.16.0.0/16)</option>
+              <option value="vpc-9f3e (192.168.0.0/16)">vpc-9f3e (192.168.0.0/16)</option>
+            </select>
+          </label>
+
+          <label>
+            サブネット
+            <select name="subnet" required>
+              <option value="subnet-a1-public (ap-northeast-1a)">subnet-a1-public (ap-northeast-1a)</option>
+              <option value="subnet-b2-private (ap-northeast-1c)">subnet-b2-private (ap-northeast-1c)</option>
+              <option value="subnet-c3-public (ap-northeast-1d)">subnet-c3-public (ap-northeast-1d)</option>
+            </select>
+          </label>
+
+          <label>
+            EBSサイズ (GiB)
+            <input type="number" name="ebs" min="8" max="2048" value="30" required />
+          </label>
+
+          <button type="submit" class="primary">作成する</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>作成済みインスタンス一覧</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>インスタンスID</th>
+              <th>名前</th>
+              <th>OS</th>
+              <th>タイプ</th>
+              <th>VPC</th>
+              <th>サブネット</th>
+              <th>EBS</th>
+              <th>状態</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="instances-body">
+            <tr class="empty-row">
+              <td colspan="9">まだインスタンスはありません。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <section id="shell-modal" class="shell-modal hidden" aria-hidden="true">
+      <div class="shell-window">
+        <div class="shell-header">
+          <span id="shell-title">接続先</span>
+          <button id="close-shell" class="danger">切断</button>
+        </div>
+        <div id="shell-output" class="shell-output"></div>
+        <form id="shell-form" class="shell-input-row">
+          <span id="shell-prompt" class="prompt">ec2-user@host:~$</span>
+          <input id="shell-input" type="text" autocomplete="off" spellcheck="false" />
+        </form>
+      </div>
+    </section>
+
+    <script>
+      const form = document.getElementById('instance-form');
+      const body = document.getElementById('instances-body');
+      const shellModal = document.getElementById('shell-modal');
+      const shellTitle = document.getElementById('shell-title');
+      const shellOutput = document.getElementById('shell-output');
+      const shellForm = document.getElementById('shell-form');
+      const shellInput = document.getElementById('shell-input');
+      const shellPrompt = document.getElementById('shell-prompt');
+      const closeShellBtn = document.getElementById('close-shell');
+
+      const instances = [];
+      let connected = null;
+
+      function randomHex(len) {
+        const chars = 'abcdef0123456789';
+        let out = '';
+        for (let i = 0; i < len; i += 1) {
+          out += chars[Math.floor(Math.random() * chars.length)];
+        }
+        return out;
+      }
+
+      function formatPrompt(instance) {
+        const user = instance.os.includes('Ubuntu') || instance.os.includes('Debian') ? 'ubuntu' : 'ec2-user';
+        return `${user}@${instance.name}:~$`;
+      }
+
+      function printLine(text, cls = '') {
+        const line = document.createElement('div');
+        line.className = `shell-line ${cls}`.trim();
+        line.textContent = text;
+        shellOutput.appendChild(line);
+        shellOutput.scrollTop = shellOutput.scrollHeight;
+      }
+
+      function clearShell() {
+        shellOutput.innerHTML = '';
+      }
+
+      function openShell(instance) {
+        if (instance.status !== 'running') {
+          return;
+        }
+
+        connected = instance;
+        shellTitle.textContent = `${instance.name} (${instance.id}) へ接続中`;
+        shellPrompt.textContent = formatPrompt(instance);
+        shellModal.classList.remove('hidden');
+        shellModal.setAttribute('aria-hidden', 'false');
+        clearShell();
+
+        printLine(`Connecting to ${instance.privateIp}...`, 'shell-dim');
+        printLine('Welcome to EC2 pseudo shell. Type "help" to show commands.', 'shell-dim');
+        printLine(`Last login: ${new Date().toLocaleString('ja-JP')} from 10.0.0.23`, 'shell-dim');
+        shellInput.focus();
+      }
+
+      function closeShell() {
+        connected = null;
+        shellModal.classList.add('hidden');
+        shellModal.setAttribute('aria-hidden', 'true');
+        shellInput.value = '';
+      }
+
+      function renderTable() {
+        if (instances.length === 0) {
+          body.innerHTML = `
+      <tr class="empty-row">
+        <td colspan="9">まだインスタンスはありません。</td>
+      </tr>
+    `;
+          return;
+        }
+
+        body.innerHTML = '';
+
+        instances.forEach((instance, index) => {
+          const isRunning = instance.status === 'running';
+          const statusClass = isRunning ? 'status-running' : 'status-stopped';
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+      <td>${instance.id}</td>
+      <td>${instance.name}</td>
+      <td>${instance.os}</td>
+      <td>${instance.type}</td>
+      <td>${instance.vpc}</td>
+      <td>${instance.subnet}</td>
+      <td>${instance.ebs} GiB</td>
+      <td><span class="${statusClass}">${instance.status}</span></td>
+      <td>
+        <button class="secondary" data-action="connect" data-index="${index}" ${isRunning ? '' : 'disabled'}>接続</button>
+        <button class="danger" data-action="shutdown" data-index="${index}" ${isRunning ? '' : 'disabled'}>シャットダウン</button>
+        <button class="primary" data-action="start" data-index="${index}" ${isRunning ? 'disabled' : ''}>起動</button>
+      </td>
+    `;
+          body.appendChild(tr);
+        });
+      }
+
+      function runCommand(rawCommand) {
+        if (!connected) {
+          return;
+        }
+
+        const command = rawCommand.trim();
+        printLine(`${shellPrompt.textContent} ${command}`);
+
+        if (!command) {
+          return;
+        }
+
+        switch (command) {
+          case 'help':
+            printLine('available: help, ls, pwd, whoami, uname -a, cat /etc/os-release, df -h, clear, exit');
+            break;
+          case 'ls':
+            printLine('app  logs  tmp  var  home  etc');
+            break;
+          case 'pwd':
+            printLine('/home/ec2-user');
+            break;
+          case 'whoami':
+            printLine(shellPrompt.textContent.split('@')[0]);
+            break;
+          case 'uname -a':
+            printLine(`Linux ${connected.name} 6.1.0-aws #1 SMP x86_64 GNU/Linux`);
+            break;
+          case 'cat /etc/os-release':
+            printLine(`NAME="${connected.os}"`);
+            printLine('ID=amzn');
+            printLine('VERSION_ID="2023"');
+            break;
+          case 'df -h':
+            printLine('Filesystem      Size  Used Avail Use% Mounted on');
+            printLine(`/dev/nvme0n1p1  ${connected.ebs}G  1.8G ${Math.max(1, connected.ebs - 2)}G   8% /`);
+            break;
+          case 'clear':
+            clearShell();
+            break;
+          case 'exit':
+            printLine('Connection closed by remote host.', 'shell-dim');
+            setTimeout(closeShell, 400);
+            break;
+          default:
+            printLine(`${command}: command not found`);
+        }
+      }
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const fd = new FormData(form);
+
+        const instance = {
+          id: `i-${randomHex(10)}`,
+          name: String(fd.get('name')),
+          os: String(fd.get('os')),
+          type: String(fd.get('type')),
+          vpc: String(fd.get('vpc')),
+          subnet: String(fd.get('subnet')),
+          ebs: Number(fd.get('ebs')),
+          privateIp: `10.0.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`,
+          status: 'running',
+        };
+
+        instances.unshift(instance);
+        renderTable();
+        form.reset();
+      });
+
+      body.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLButtonElement)) {
+          return;
+        }
+
+        const idx = Number(target.dataset.index);
+        const instance = instances[idx];
+        if (!instance) {
+          return;
+        }
+
+        const action = target.dataset.action;
+        if (action === 'connect') {
+          openShell(instance);
+          return;
+        }
+
+        if (action === 'shutdown' && instance.status === 'running') {
+          instance.status = 'stopped';
+
+          if (connected && connected.id === instance.id) {
+            printLine('System is going down for power off NOW!', 'shell-dim');
+            setTimeout(closeShell, 500);
+          }
+
+          renderTable();
+          return;
+        }
+
+        if (action === 'start' && instance.status === 'stopped') {
+          instance.status = 'running';
+          renderTable();
+        }
+      });
+
+      shellForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        runCommand(shellInput.value);
+        shellInput.value = '';
+      });
+
+      closeShellBtn.addEventListener('click', closeShell);
+
+      shellModal.addEventListener('click', (event) => {
+        if (event.target === shellModal) {
+          closeShell();
+        }
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !shellModal.classList.contains('hidden')) {
+          closeShell();
+        }
+      });
+
+      renderTable();
+    </script>
+  </body>
+</html>
